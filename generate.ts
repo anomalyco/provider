@@ -14,13 +14,16 @@ for (const file of new Bun.Glob("*").scanSync("metadata")) {
   console.log("generating", name, "version", version);
   const result =
     await $`pulumi package add terraform-provider ${provider.terraform} ${provider.version}`;
-  const path = result.stdout
+  let path = result.stdout
     .toString()
     .match(/at (\/[^\n]+)/)
     ?.at(1);
   if (!path) {
     console.log("failed to find path");
     continue;
+  }
+  if (path.endsWith("/sdks")) {
+    path = `${path}/${provider.name}`;
   }
   console.log("path", path);
   process.chdir(path);
