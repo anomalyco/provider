@@ -1,0 +1,3 @@
+name = "elasticstack"
+terraform = "registry.terraform.io/elastic/elasticstack"
+version = "0.13.1"
