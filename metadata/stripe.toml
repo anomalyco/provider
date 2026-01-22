@@ -1,0 +1,3 @@
+name = "stripe"
+terraform = "registry.terraform.io/lukasaron/stripe"
+version = "3.4.0"
