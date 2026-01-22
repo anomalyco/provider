@@ -1,0 +1,3 @@
+name = "propel"
+terraform = "registry.terraform.io/propeldata/propel"
+version = "1.3.5"
