@@ -1,0 +1,3 @@
+name = "incident-io"
+terraform = "registry.terraform.io/incident-io/incident"
+version = "5.12.0"
