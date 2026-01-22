@@ -1,0 +1,3 @@
+name = "catchpoint"
+terraform = "registry.terraform.io/catchpoint/catchpoint"
+version = "1.3.0"
