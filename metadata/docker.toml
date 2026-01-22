@@ -1,0 +1,3 @@
+name = "docker"
+terraform = "registry.terraform.io/kreuzwerker/docker"
+version = "3.6.1" 
