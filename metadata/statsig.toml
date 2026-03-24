@@ -1,0 +1,3 @@
+name = "statsig"
+terraform = "registry.terraform.io/statsig-io/statsig"
+version = "2.0.0"

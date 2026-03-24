@@ -1,4 +1,3 @@
 name = "planetscale"
 terraform = "registry.terraform.io/planetscale/planetscale"
-version = "0.1.0"
-suffix = "1"
+version = "0.6.0"

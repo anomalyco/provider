@@ -1,0 +1,3 @@
+name = "timescale"
+terraform = "registry.terraform.io/timescale/timescale"
+version = "1.15.0"

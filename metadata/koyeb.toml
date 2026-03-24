@@ -1,0 +1,3 @@
+name = "koyeb"
+terraform = "registry.terraform.io/koyeb/koyeb"
+version = "0.1.11"
