@@ -36,3 +36,5 @@ jobs:
           else
             bun run generate.ts --dry
           fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
