@@ -1,3 +1,3 @@
 name = "backblaze-b2"
 terraform = "registry.terraform.io/Backblaze/b2"
-version = "0.9.0"
+version = "0.12.1"

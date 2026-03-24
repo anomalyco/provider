@@ -14,14 +14,14 @@ for (const file of new Bun.Glob("*").scanSync("metadata")) {
   console.log("generating", name, "version", version);
   const result =
     await $`pulumi package add terraform-provider ${provider.terraform} ${provider.version}`;
-  const path = result.stdout
-    .toString()
-    .match(/at (\/[^\n]+)/)
-    ?.at(1);
-  if (!path) {
-    console.log("failed to find path");
+  const output = result.stdout.toString();
+  const sdksPath = output.match(/at (\/[^\n]+)/)?.at(1);
+  const packageName = output.match(/for the (\S+) package/)?.at(1);
+  if (!sdksPath || !packageName) {
+    console.log("failed to parse output");
     continue;
   }
+  const path = `${sdksPath}/${packageName}`;
   console.log("path", path);
   process.chdir(path);
 
@@ -30,11 +30,15 @@ for (const file of new Bun.Glob("*").scanSync("metadata")) {
   json.name = name;
   json.version = provider.version;
   json.files = ["bin/", "README.md", "LICENSE"];
+  json.repository = {
+    type: "git",
+    url: "https://github.com/anomalyco/provider",
+  };
   if (provider.suffix) json.version += "-" + provider.suffix;
   await Bun.write(pkg, JSON.stringify(json, null, 2));
 
   const tsconfig = Bun.file("tsconfig.json");
-  const tsjson = await tsconfig.json();
+  const tsjson = Bun.JSONC.parse(await tsconfig.text());
   tsjson.compilerOptions.skipLibCheck = true;
   await Bun.write(tsconfig, JSON.stringify(tsjson, null, 2));
 
