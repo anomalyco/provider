@@ -33,6 +33,10 @@ for (const file of new Bun.Glob("*").scanSync("metadata")) {
   json.name = name;
   json.version = provider.version;
   json.files = ["bin/", "README.md", "LICENSE"];
+  json.repository = {
+    type: "git",
+    url: "https://github.com/anomalyco/provider",
+  };
   if (provider.suffix) json.version += "-" + provider.suffix;
   await Bun.write(pkg, JSON.stringify(json, null, 2));
 
