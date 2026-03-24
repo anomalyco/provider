@@ -1,0 +1,3 @@
+name = "jumpcloud"
+terraform = "registry.terraform.io/agilize/jumpcloud"
+version = "1.0.1"
