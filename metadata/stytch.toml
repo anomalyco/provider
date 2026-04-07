@@ -1,0 +1,3 @@
+name = "stytch"
+terraform = "registry.terraform.io/stytchauth/stytch"
+version = "3.2.1"
