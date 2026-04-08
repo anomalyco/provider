@@ -34,13 +34,9 @@ for (const file of new Bun.Glob("*").scanSync("metadata")) {
     type: "git",
     url: "https://github.com/anomalyco/provider",
   };
+  json.scripts.build = "tsc --skipLibCheck";
   if (provider.suffix) json.version += "-" + provider.suffix;
   await Bun.write(pkg, JSON.stringify(json, null, 2));
-
-  const tsconfig = Bun.file("tsconfig.json");
-  const tsjson = await tsconfig.json();
-  tsjson.compilerOptions.skipLibCheck = true;
-  await Bun.write(tsconfig, JSON.stringify(tsjson, null, 2));
 
   await $`bun install && bun run build`;
   if (!dry) await $`npm publish --access public`;
