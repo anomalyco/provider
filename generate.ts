@@ -38,7 +38,7 @@ for (const file of new Bun.Glob("*").scanSync("metadata")) {
   await Bun.write(pkg, JSON.stringify(json, null, 2));
 
   const tsconfig = Bun.file("tsconfig.json");
-  const tsjson = await tsconfig.json();
+  const tsjson = Bun.JSONC.parse(await tsconfig.text());
   tsjson.compilerOptions.skipLibCheck = true;
   await Bun.write(tsconfig, JSON.stringify(tsjson, null, 2));
 
