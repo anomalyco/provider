@@ -1,0 +1,3 @@
+name = "sentry"
+terraform = "registry.terraform.io/jianyuan/sentry"
+version = "0.14.13"
