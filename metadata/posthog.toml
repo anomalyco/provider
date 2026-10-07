@@ -1,0 +1,3 @@
+name = "posthog"
+terraform = "registry.terraform.io/PostHog/posthog"
+version = "1.0.24"
