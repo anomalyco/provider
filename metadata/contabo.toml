@@ -1,0 +1,3 @@
+name = "contabo"
+terraform = "registry.terraform.io/contabo/contabo"
+version = "0.1.44" 
