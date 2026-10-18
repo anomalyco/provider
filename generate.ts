@@ -43,5 +43,5 @@ for (const file of new Bun.Glob("*").scanSync("metadata")) {
   await Bun.write(tsconfig, JSON.stringify(tsjson, null, 2));
 
   await $`bun install && bun run build`;
-  if (!dry) await $`npm publish --access public`;
+  if (!dry) await $`npm publish --access public --tag latest`;
 }
