@@ -30,11 +30,11 @@ jobs:
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
+      - name: install npm
+        run: npm install -g npm@latest
       - run: |
           if [ "${{ github.ref }}" = "refs/heads/master" ]; then
             bun run generate.ts
           else
             bun run generate.ts --dry
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
